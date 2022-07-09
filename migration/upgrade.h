@@ -11,4 +11,6 @@
 #ifndef QEMU_UPGRADE_H
 #define QEMU_UPGRADE_H
 
+int live_upgrade_setup_parameter(int argc, char **argv);
+
 #endif

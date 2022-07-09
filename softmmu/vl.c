@@ -136,6 +136,10 @@
 
 #include "config-host.h"
 
+#ifdef CONFIG_LIVE_UPGRADE
+#include "migration/upgrade.h"
+#endif
+
 #define MAX_VIRTIO_CONSOLES 1
 
 typedef struct BlockdevOptionsQueueEntry {
@@ -2639,6 +2643,11 @@ void qemu_init(int argc, char **argv, char **envp)
     qemu_init_arch_modules();
 
     qemu_init_subsystems();
+
+#ifdef CONFIG_LIVE_UPGRADE
+    if (live_upgrade_setup_parameter(argc, argv))
+        exit(1);
+#endif
 
     /* first pass of option parsing */
     optind = 1;
