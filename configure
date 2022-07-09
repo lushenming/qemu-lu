@@ -316,6 +316,7 @@ ninja=""
 bindir="bin"
 skip_meson=no
 vfio_user_server="disabled"
+live_upgrade="disabled"
 
 # The following Meson options are handled manually (still they
 # are included in the automatically generated help message)
@@ -917,6 +918,10 @@ for opt do
   --enable-tcmalloc) meson_option_parse --enable-malloc=tcmalloc tcmalloc
   ;;
   --enable-jemalloc) meson_option_parse --enable-malloc=jemalloc jemalloc
+  ;;
+  --enable-live-upgrade) live_upgrade="enabled"
+  ;;
+  --disable-live-upgrade) live_upgrade="disabled"
   ;;
   # everything else has the same name in configure and meson
   --*) meson_option_parse "$opt" "$optarg"
@@ -2398,6 +2403,10 @@ if test -n "$gdb_bin"; then
     if version_ge ${gdb_version##* } 9.1; then
         echo "HAVE_GDB_BIN=$gdb_bin" >> $config_host_mak
     fi
+fi
+
+if test "$live_upgrade" = "enabled" ; then
+    echo "CONFIG_LIVE_UPGRADE=y" >> $config_host_mak
 fi
 
 echo "ROMS=$roms" >> $config_host_mak

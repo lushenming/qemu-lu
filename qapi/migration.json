@@ -2040,3 +2040,27 @@
   'data': { 'job-id': 'str',
             'tag': 'str',
             'devices': ['str'] } }
+
+##
+# @live-upgrade:
+#
+# Live upgrade (local migrate) the current running
+# qemu to another binary.
+#
+# @binary: new qemu binary path
+#
+# Returns: success or failure reason as a string
+#
+# Since: 7.x
+#
+# Example:
+#
+# -> { "execute": "live-upgrade" , "arguments":
+#      { "binary": "/bin/qemu-system-x86_64" } }
+# <- { "return": "success" }
+#
+##
+{ 'command': 'live-upgrade',
+  'data': {'binary':'str'},
+  'returns': 'str',
+  'if': 'defined(CONFIG_LIVE_UPGRADE)' }

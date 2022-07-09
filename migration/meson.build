@@ -35,3 +35,6 @@ softmmu_ss.add(when: zstd, if_true: files('multifd-zstd.c'))
 
 specific_ss.add(when: 'CONFIG_SOFTMMU',
                 if_true: files('dirtyrate.c', 'ram.c', 'target.c'))
+
+softmmu_ss.add(when: 'CONFIG_LIVE_UPGRADE',
+               if_true: files('upgrade.c'))
