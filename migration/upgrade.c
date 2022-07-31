@@ -9,13 +9,35 @@
  */
 
 #include "upgrade.h"
+#include "qemu/error-report.h"
 
 /* only support -qemu-upgrade-shmfd option now */
-#define LIVE_UPGRADE_ARG_NUM	2
-#define LIVE_UPGRADE_SHM_SIZE	(16 * 1024 * 1024)
+#define LIVE_UPGRADE_ARG_NUM        2
+#define LIVE_UPGRADE_SHM_SIZE       (16 * 1024 * 1024)
+#define LIVE_UPGRADE_HEADER_MAGIC   (0x95273E5F)
+/* hugepage backing RAM */
+#define MAX_RAM_FD                  4
+#define MAX_NAME_LEN                32
 
-int argc_i;
-char **argv_i;
+struct live_upgrade_header {
+    uint32_t magic;
+    uint32_t version;
+};
+
+struct live_upgrade_fd {
+    int ram_fds[MAX_RAM_FD];
+    char ram_fd_names[MAX_RAM_FD][MAX_NAME_LEN];
+    int ram_fd_index;
+};
+
+struct live_upgrade_state {
+    struct live_upgrade_header head;
+    struct live_upgrade_fd fds;
+};
+
+static int argc_i;
+static char **argv_i;
+static struct live_upgrade_state curr_state;
 
 int live_upgrade_setup_parameter(int argc, char **argv)
 {
@@ -52,6 +74,40 @@ static void live_upgrade_update_parameter(const char *binary, int shm_fd)
     argv_i[0] = g_strdup(binary);
     argv_i[argc_i++] = g_strdup("-qemu-upgrade-shmfd");
     argv_i[argc_i++] = g_strdup_printf("%d", shm_fd);
+}
+
+static int _live_upgrade_save_fd(int *fds, char **names, int *fd_idx,
+                                 int fd, char *name)
+{
+    fds[*fd_idx] = fd;
+    strcpy(names[*fd_idx], name);
+    *fd_idx++;
+    return 0;
+}
+
+int live_upgrade_save_fd(char *name, int fd, enum LIVE_UPGRADE_FD_TYPE type)
+{
+    int *fds, *fd_idx;
+    char **names;
+
+    if (!name || strlen(name) >= MAX_NAME_LEN || fd <= 0)
+        return -EINVAL;
+
+    switch (type) {
+    case LIVE_UPGRADE_RAM_FD:
+        {
+            fds = curr_state.fds.ram_fds;
+            names = curr_state.fds.ram_fd_names;
+            fd_idx = &curr_state.fds.ram_fd_index;
+            if (*fd_idx >= MAX_RAM_FD)
+                return -ENOSPC;
+        }
+        break;
+    default:
+        return -ENOSYS;
+    }
+
+    return _live_upgrade_save_fd(fds, names, fd_idx, fd, name);
 }
 
 static int live_upgrade_setup_shm(uint8_t **shm_ptr)
@@ -109,6 +165,12 @@ out:
     return ret;
 }
 
+static void live_upgrade_init_state_header(void)
+{
+    curr_state.head.magic = LIVE_UPGRADE_HEADER_MAGIC;
+    curr_state.head.version = 1;
+}
+
 char *qmp_live_upgrade(const char *binary, Error **errp)
 {
     char *ret = NULL;
@@ -127,6 +189,10 @@ char *qmp_live_upgrade(const char *binary, Error **errp)
     }
 
     live_upgrade_update_parameter(binary, shm_fd);
+
+    live_upgrade_init_state_header();
+
+    memcpy(shm_ptr, &curr_state, sizeof(curr_state));
 
     ret = g_strdup("success");
     return ret;

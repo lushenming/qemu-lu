@@ -11,6 +11,11 @@
 #ifndef QEMU_UPGRADE_H
 #define QEMU_UPGRADE_H
 
+enum LIVE_UPGRADE_FD_TYPE {
+    LIVE_UPGRADE_RAM_FD,
+};
+
 int live_upgrade_setup_parameter(int argc, char **argv);
+int live_upgrade_save_fd(char *name, int fd, enum LIVE_UPGRADE_FD_TYPE type);
 
 #endif

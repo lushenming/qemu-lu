@@ -79,6 +79,10 @@
 #include <daxctl/libdaxctl.h>
 #endif
 
+#ifdef CONFIG_LIVE_UPGRADE
+#include "migration/upgrade.h"
+#endif
+
 //#define DEBUG_SUBPAGE
 
 /* ram_list is read under rcu_read_lock()/rcu_read_unlock().  Writes
@@ -2145,6 +2149,10 @@ RAMBlock *qemu_ram_alloc_from_file(ram_addr_t size, MemoryRegion *mr,
         close(fd);
         return NULL;
     }
+
+#ifdef CONFIG_LIVE_UPGRADE
+    live_upgrade_save_fd(memory_region_name(mr), fd, LIVE_UPGRADE_RAM_FD);
+#endif
 
     return block;
 }
