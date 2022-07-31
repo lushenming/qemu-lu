@@ -15,6 +15,10 @@ enum LIVE_UPGRADE_FD_TYPE {
     LIVE_UPGRADE_RAM_FD,
 };
 
+enum LIVE_UPGRADE_SYNC_EVENT {
+    LIVE_UPGRADE_NEW_PREPARED = 7,
+};
+
 int live_upgrade_setup_parameter(int argc, char **argv);
 int live_upgrade_save_fd(char *name, int fd, enum LIVE_UPGRADE_FD_TYPE type);
 

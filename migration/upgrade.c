@@ -37,6 +37,8 @@ struct live_upgrade_state {
 
 static int argc_i;
 static char **argv_i;
+static volatile uint8_t *curr_shm_ptr;
+static int curr_shm_index;
 static struct live_upgrade_state curr_state;
 
 int live_upgrade_setup_parameter(int argc, char **argv)
@@ -110,7 +112,7 @@ int live_upgrade_save_fd(char *name, int fd, enum LIVE_UPGRADE_FD_TYPE type)
     return _live_upgrade_save_fd(fds, names, fd_idx, fd, name);
 }
 
-static int live_upgrade_setup_shm(uint8_t **shm_ptr)
+static int live_upgrade_setup_shm(void)
 {
     char *shm_path = NULL, *buf = NULL;
     int shm_fd, ret;
@@ -145,9 +147,9 @@ static int live_upgrade_setup_shm(uint8_t **shm_ptr)
         goto out;
     }
 
-    *shm_ptr = mmap(0, LIVE_UPGRADE_SHM_SIZE, PROT_READ | PROT_WRITE,
+    curr_shm_ptr = mmap(0, LIVE_UPGRADE_SHM_SIZE, PROT_READ | PROT_WRITE,
                    MAP_SHARED, shm_fd, 0);
-    if (*shm_ptr == MAP_FAILED) {
+    if (curr_shm_ptr == MAP_FAILED) {
         error_report("%s: mmap failed: %s", __func__, strerror(errno));
         ret = -errno;
         goto out;
@@ -165,17 +167,37 @@ out:
     return ret;
 }
 
-static void live_upgrade_init_state_header(void)
+static void live_upgrade_shm_put(uint8_t *buf, size_t len)
+{
+    memcpy(curr_shm_ptr + curr_shm_index, buf, len);
+    curr_shm_index += len;
+}
+
+static void live_upgrade_init_shm(void)
 {
     curr_state.head.magic = LIVE_UPGRADE_HEADER_MAGIC;
     curr_state.head.version = 1;
+
+    curr_shm_index = 0;
+
+    live_upgrade_shm_put(&curr_state, sizeof(curr_state));
+}
+
+static int live_upgrade_wait_new(enum LIVE_UPGRADE_SYNC_EVENT event)
+{
+    while (1) {
+        if (curr_shm_ptr[curr_shm_index] == event)
+            break;
+        g_usleep(1);
+    }
+    curr_shm_index++;
+    return 0;
 }
 
 char *qmp_live_upgrade(const char *binary, Error **errp)
 {
     char *ret = NULL;
     int shm_fd;
-    uint8_t *shm_ptr = NULL;
     pid_t pid;
 
     if (!strlen(binary)) {
@@ -183,7 +205,7 @@ char *qmp_live_upgrade(const char *binary, Error **errp)
         return ret;
     }
 
-    shm_fd = live_upgrade_setup_shm(&shm_ptr);
+    shm_fd = live_upgrade_setup_shm();
     if (shm_fd < 0) {
         ret = g_strdup("Setup shm failed");
         return ret;
@@ -191,9 +213,7 @@ char *qmp_live_upgrade(const char *binary, Error **errp)
 
     live_upgrade_update_parameter(binary, shm_fd);
 
-    live_upgrade_init_state_header();
-
-    memcpy(shm_ptr, &curr_state, sizeof(curr_state));
+    live_upgrade_init_shm();
 
     pid = fork();
     if (pid == -1) {
@@ -205,6 +225,12 @@ char *qmp_live_upgrade(const char *binary, Error **errp)
             error_report("live upgrade: execv failed: %s", strerror(errno));
             exit(1);
         }
+    }
+
+    /* wait new qemu to complete initialization */
+    if (live_upgrade_wait_new(LIVE_UPGRADE_NEW_PREPARED) < 0) {
+        ret = g_strdup("New qemu initialize failed");
+        return ret;
     }
 
     ret = g_strdup("success");
