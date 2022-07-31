@@ -176,6 +176,7 @@ char *qmp_live_upgrade(const char *binary, Error **errp)
     char *ret = NULL;
     int shm_fd;
     uint8_t *shm_ptr = NULL;
+    pid_t pid;
 
     if (!strlen(binary)) {
         ret = g_strdup("Invalid arguments");
@@ -193,6 +194,18 @@ char *qmp_live_upgrade(const char *binary, Error **errp)
     live_upgrade_init_state_header();
 
     memcpy(shm_ptr, &curr_state, sizeof(curr_state));
+
+    pid = fork();
+    if (pid == -1) {
+        ret = g_strdup("fork failed");
+        return ret;
+    }
+    if (pid == 0) {
+        if (execv(argv_i[0], argv_i) < 0) {
+            error_report("live upgrade: execv failed: %s", strerror(errno));
+            exit(1);
+        }
+    }
 
     ret = g_strdup("success");
     return ret;
